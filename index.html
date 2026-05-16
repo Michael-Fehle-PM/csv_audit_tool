@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CSV Audit Tool</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.x/dist/tabler-icons.min.css">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #ffffff;
+      --bg-secondary: #f5f5f4;
+      --bg-tertiary: #f0efed;
+      --text-primary: #1a1a18;
+      --text-secondary: #6b6b67;
+      --text-tertiary: #9c9c97;
+      --border: rgba(0,0,0,0.12);
+      --border-strong: rgba(0,0,0,0.25);
+      --radius-md: 8px;
+      --radius-lg: 12px;
+      --green: #1D9E75;
+      --green-light: #E1F5EE;
+      --green-dark: #0F6E56;
+      --amber: #BA7517;
+      --amber-light: #FAEEDA;
+      --amber-dark: #854F0B;
+      --red: #E24B4A;
+      --red-light: #FCEBEB;
+      --red-dark: #A32D2D;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #1c1c1a;
+        --bg-secondary: #252522;
+        --bg-tertiary: #2e2e2b;
+        --text-primary: #f0efed;
+        --text-secondary: #9c9c97;
+        --text-tertiary: #6b6b67;
+        --border: rgba(255,255,255,0.1);
+        --border-strong: rgba(255,255,255,0.2);
+        --green-light: #04342C;
+        --green-dark: #9FE1CB;
+        --amber-light: #412402;
+        --amber-dark: #FAC775;
+        --red-light: #501313;
+        --red-dark: #F7C1C1;
+      }
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      padding: 2rem 1rem;
+    }
+
+    .container { max-width: 780px; margin: 0 auto; }
+
+    header { margin-bottom: 2rem; }
+    header h1 { font-size: 22px; font-weight: 500; margin-bottom: 4px; }
+    header p { font-size: 14px; color: var(--text-secondary); }
+
+    #drop-zone {
+      background: var(--bg);
+      border: 1.5px dashed var(--border-strong);
+      border-radius: var(--radius-lg);
+      padding: 3.5rem 2rem;
+      text-align: center;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    #drop-zone:hover, #drop-zone.drag-over {
+      background: var(--bg-secondary);
+      border-color: var(--green);
+    }
+    #drop-zone input[type=file] { display: none; }
+    #drop-zone .icon { font-size: 32px; color: var(--text-tertiary); display: block; margin-bottom: 12px; }
+    #drop-zone h2 { font-size: 16px; font-weight: 500; margin-bottom: 4px; }
+    #drop-zone p { font-size: 13px; color: var(--text-secondary); }
+
+    #results { display: none; }
+
+    .result-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-bottom: 1rem;
+      background: var(--bg);
+      border-radius: var(--radius-lg);
+      border: 0.5px solid var(--border);
+      padding: 1rem 1.25rem;
+    }
+    .result-header h2 { font-size: 17px; font-weight: 500; margin-bottom: 2px; }
+    .result-header p { font-size: 13px; color: var(--text-secondary); }
+
+    .badge {
+      display: inline-block;
+      font-size: 12px;
+      font-weight: 500;
+      padding: 4px 12px;
+      border-radius: 20px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .badge-ok { background: var(--green-light); color: var(--green-dark); }
+    .badge-warn { background: var(--amber-light); color: var(--amber-dark); }
+    .badge-bad { background: var(--red-light); color: var(--red-dark); }
+
+    .alert {
+      font-size: 13px;
+      color: var(--text-secondary);
+      background: var(--bg-secondary);
+      border-radius: var(--radius-md);
+      padding: 0.6rem 0.9rem;
+      margin-bottom: 1rem;
+      display: none;
+    }
+    .alert i { font-size: 14px; vertical-align: -2px; margin-right: 5px; color: var(--amber); }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 10px;
+      margin-bottom: 1.5rem;
+    }
+    .metric {
+      background: var(--bg);
+      border: 0.5px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 0.9rem 1rem;
+    }
+    .metric-label { font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
+    .metric-value { font-size: 22px; font-weight: 500; }
+
+    .section-title {
+      font-size: 11px;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--text-tertiary);
+      margin: 1.75rem 0 0.75rem;
+    }
+
+    .finding {
+      background: var(--bg);
+      border: 0.5px solid var(--border);
+      border-left: 3px solid var(--amber);
+      border-radius: 0 var(--radius-md) var(--radius-md) 0;
+      padding: 0.75rem 1rem;
+      margin-bottom: 8px;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .finding.ok { border-left-color: var(--green); }
+    .finding.error { border-left-color: var(--red); }
+    .finding i { font-size: 14px; vertical-align: -2px; margin-right: 6px; }
+    .finding.ok i { color: var(--green); }
+    .finding.warn i { color: var(--amber); }
+    .finding.error i { color: var(--red); }
+
+    .col-table { width: 100%; border-collapse: collapse; }
+    .col-table-wrap {
+      background: var(--bg);
+      border: 0.5px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+    }
+    .col-table th {
+      font-size: 11px;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-tertiary);
+      padding: 10px 14px;
+      text-align: left;
+      border-bottom: 0.5px solid var(--border);
+      background: var(--bg-secondary);
+    }
+    .col-table td {
+      padding: 10px 14px;
+      font-size: 13px;
+      border-bottom: 0.5px solid var(--border);
+      vertical-align: middle;
+    }
+    .col-table tr:last-child td { border-bottom: none; }
+    .col-name { font-weight: 500; }
+    .col-type { color: var(--text-secondary); font-size: 12px; }
+    .bar-wrap { width: 100px; height: 6px; background: var(--bg-secondary); border-radius: 3px; overflow: hidden; display: inline-block; vertical-align: middle; margin-right: 6px; }
+    .bar-fill { height: 100%; border-radius: 3px; background: var(--green); }
+    .bar-fill.warn { background: var(--amber); }
+    .bar-fill.danger { background: var(--red); }
+    .pct { font-size: 12px; color: var(--text-secondary); }
+    .flag { font-size: 11px; margin-left: 4px; color: var(--amber); }
+
+    .sample-wrap {
+      background: var(--bg);
+      border: 0.5px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow-x: auto;
+    }
+    .sample-table { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
+    .sample-table th {
+      text-align: left;
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      padding: 8px 12px;
+      border-bottom: 0.5px solid var(--border);
+      background: var(--bg-secondary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .sample-table td {
+      padding: 7px 12px;
+      border-bottom: 0.5px solid var(--border);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .sample-table tr:last-child td { border-bottom: none; }
+    .null-cell { color: var(--text-tertiary); font-style: italic; }
+
+    .actions { margin-top: 1.5rem; display: flex; gap: 10px; }
+    button {
+      font-family: inherit;
+      font-size: 13px;
+      padding: 8px 16px;
+      border-radius: var(--radius-md);
+      border: 0.5px solid var(--border-strong);
+      background: var(--bg);
+      color: var(--text-primary);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: background 0.1s;
+    }
+    button:hover { background: var(--bg-secondary); }
+    button i { font-size: 15px; }
+
+    footer {
+      margin-top: 3rem;
+      text-align: center;
+      font-size: 12px;
+      color: var(--text-tertiary);
+    }
+    footer a { color: var(--text-tertiary); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>CSV Audit Tool</h1>
+      <p>Upload a CSV file to get an instant data quality report.</p>
+    </header>
+
+    <div id="drop-zone"
+      onclick="document.getElementById('file-input').click()"
+      ondragover="handleDrag(event,true)"
+      ondragleave="handleDrag(event,false)"
+      ondrop="handleDrop(event)">
+      <input type="file" id="file-input" accept=".csv" onchange="handleFile(this.files[0])">
+      <i class="ti ti-upload icon" aria-hidden="true"></i>
+      <h2>Drop a CSV file here</h2>
+      <p>or click to browse &mdash; files are processed entirely in your browser</p>
+    </div>
+
+    <div id="results">
+      <p class="section-title" style="margin-top:1.5rem;">Summary</p>
+      <div class="result-header">
+        <div>
+          <h2 id="file-name"></h2>
+          <p id="file-meta"></p>
+        </div>
+        <span id="overall-badge" class="badge"></span>
+      </div>
+
+      <div id="delimiter-alert" class="alert">
+        <i class="ti ti-alert-triangle" aria-hidden="true"></i>
+        <span id="delimiter-msg"></span>
+      </div>
+
+      <div class="metric-grid" id="metrics"></div>
+
+      <p class="section-title">Findings</p>
+      <div id="findings"></div>
+
+      <p class="section-title">Column analysis</p>
+      <div class="col-table-wrap">
+        <table class="col-table" aria-label="Column analysis">
+          <thead>
+            <tr>
+              <th>Column</th>
+              <th>Type</th>
+              <th colspan="2">Null rate</th>
+              <th>Unique values</th>
+            </tr>
+          </thead>
+          <tbody id="col-rows"></tbody>
+        </table>
+      </div>
+
+      <p class="section-title">Sample data (first 5 rows)</p>
+      <div class="sample-wrap">
+        <table class="sample-table" aria-label="Sample data">
+          <thead id="sample-head"></thead>
+          <tbody id="sample-body"></tbody>
+        </table>
+      </div>
+
+      <div class="actions">
+        <button onclick="resetTool()"><i class="ti ti-refresh" aria-hidden="true"></i> Analyse another file</button>
+      </div>
+    </div>
+
+    <footer>
+      <p>All analysis runs locally in your browser. No data is uploaded anywhere. &mdash; <a href="https://github.com/MichaelF-PM/csv-audit-tool">github.com/MichaelF-PM/csv-audit-tool</a></p>
+    </footer>
+  </div>
+
+  <script>
+    function handleDrag(e, over) {
+      e.preventDefault();
+      document.getElementById('drop-zone').classList.toggle('drag-over', over);
+    }
+    function handleDrop(e) {
+      e.preventDefault();
+      handleDrag(e, false);
+      const f = e.dataTransfer.files[0];
+      if (f && f.name.endsWith('.csv')) handleFile(f);
+    }
+    function handleFile(file) {
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = e => analyse(file.name, file.size, e.target.result);
+      reader.readAsText(file);
+    }
+
+    function detectDelimiter(lines) {
+      const sample = lines.slice(0, 20).join('\n');
+      const commas = (sample.match(/,/g) || []).length;
+      const semis  = (sample.match(/;/g)  || []).length;
+      const tabs   = (sample.match(/\t/g) || []).length;
+      if (tabs > commas && tabs > semis) return '\t';
+      if (semis > commas) return ';';
+      return ',';
+    }
+
+    function countMixedDelimRows(lines) {
+      return lines.slice(1).filter(line => {
+        const s = (line.match(/;/g) || []).length;
+        const c = (line.match(/,/g) || []).length;
+        return s > c;
+      }).length;
+    }
+
+    function normaliseLine(line) {
+      const s = (line.match(/;/g) || []).length;
+      const c = (line.match(/,/g) || []).length;
+      return s > c ? line.replace(/;/g, ',') : line;
+    }
+
+    function parseRow(line) {
+      const result = [];
+      let cur = '', inQ = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') { inQ = !inQ; }
+        else if (ch === ',' && !inQ) { result.push(cur.trim()); cur = ''; }
+        else cur += ch;
+      }
+      result.push(cur.trim());
+      return result;
+    }
+
+    function cleanNumeric(v) {
+      return (v || '').toString().replace(/[$,\s]/g, '').trim();
+    }
+
+    function inferType(values) {
+      const filled = values.filter(v => v !== '');
+      if (!filled.length) return 'empty';
+      const numOk = filled.filter(v => { const n = cleanNumeric(v); return !isNaN(parseFloat(n)) && isFinite(n); }).length;
+      if (numOk / filled.length > 0.85) return 'numeric';
+      const dateRe = /^\d{4}[-/.]\d{2}[-/.]\d{2}$|^\d{1,2}[-/.]\d{2}[-/.]\d{4}$|^\w+ \d{1,2},? \d{4}$|\d{4}\.\d{2}\.\d{2}/;
+      const dateOk = filled.filter(v => dateRe.test(v.trim())).length;
+      if (dateOk / filled.length > 0.7) return 'date';
+      return 'text';
+    }
+
+    function detectOutliers(values) {
+      const nums = values.map(v => parseFloat(cleanNumeric(v))).filter(v => !isNaN(v));
+      const negatives = nums.filter(v => v < 0).length;
+      if (nums.length < 4) return { count: 0, negatives };
+      const sorted = [...nums].sort((a, b) => a - b);
+      const q1 = sorted[Math.floor(sorted.length * 0.25)];
+      const q3 = sorted[Math.floor(sorted.length * 0.75)];
+      const iqr = q3 - q1;
+      const count = iqr === 0 ? 0 : sorted.filter(v => v < q1 - 1.5*iqr || v > q3 + 1.5*iqr).length;
+      return { count, negatives };
+    }
+
+    function isNull(v) {
+      const s = (v || '').toLowerCase().trim();
+      return s === '' || s === 'null' || s === 'n/a' || s === 'na' || s === 'none';
+    }
+
+    function formatBytes(b) {
+      if (b < 1024) return b + ' B';
+      if (b < 1048576) return (b/1024).toFixed(1) + ' KB';
+      return (b/1048576).toFixed(1) + ' MB';
+    }
+
+    function analyse(filename, filesize, text) {
+      const rawLines = text.trim().split(/\r?\n/);
+      const mixedCount = countMixedDelimRows(rawLines);
+      const lines = rawLines.map(normaliseLine);
+      const headers = parseRow(lines[0]);
+      const rows = lines.slice(1).map(parseRow);
+      const totalRows = rows.length;
+      const totalCols = headers.length;
+
+      const cols = headers.map((h, i) => {
+        const vals = rows.map(r => r[i] !== undefined ? r[i] : '');
+        const nullCount = vals.filter(isNull).length;
+        const filled = vals.filter(v => !isNull(v));
+        const type = inferType(filled);
+        const unique = new Set(filled).size;
+        const { count: outliers, negatives } = type === 'numeric' ? detectOutliers(filled) : { count: 0, negatives: 0 };
+        const hasCurrency = type === 'numeric' && vals.some(v => /^\$/.test((v||'').trim()));
+        return { name: h, nullCount, nullRate: nullCount/totalRows, type, unique, outliers, negatives, hasCurrency, vals };
+      });
+
+      const totalNulls = cols.reduce((s,c) => s + c.nullCount, 0);
+      const completeness = ((totalRows*totalCols - totalNulls) / (totalRows*totalCols) * 100);
+      const dupRows = totalRows - new Set(rows.map(r => r.join('|'))).size;
+      const totalOutliers = cols.reduce((s,c) => s + c.outliers, 0);
+      const totalNegatives = cols.reduce((s,c) => s + c.negatives, 0);
+      const highNullCols = cols.filter(c => c.nullRate > 0.2);
+      const currencyCols = cols.filter(c => c.hasCurrency);
+      const dateCols = cols.filter(c => c.type === 'date');
+      const constCols = cols.filter(c => c.unique <= 1 && c.nullRate < 1);
+
+      let score = 'Good';
+      if (mixedCount > 0 || dupRows > totalRows*0.05 || highNullCols.length > 0 || completeness < 95 || totalNegatives > 0 || currencyCols.length > 0) score = 'Needs attention';
+      if (dupRows > totalRows*0.15 || completeness < 70) score = 'Poor';
+
+      // Render
+      document.getElementById('file-name').textContent = filename;
+      document.getElementById('file-meta').textContent = `${totalRows.toLocaleString()} rows · ${totalCols} columns · ${formatBytes(filesize)}`;
+
+      const ob = document.getElementById('overall-badge');
+      ob.textContent = score;
+      ob.className = 'badge ' + (score==='Good' ? 'badge-ok' : score==='Needs attention' ? 'badge-warn' : 'badge-bad');
+
+      if (mixedCount > 0) {
+        const da = document.getElementById('delimiter-alert');
+        da.style.display = 'block';
+        document.getElementById('delimiter-msg').textContent = `Mixed delimiters detected – ${mixedCount} row${mixedCount>1?'s':''} used semicolons and were normalised automatically. The source file should be standardised.`;
+      }
+
+      document.getElementById('metrics').innerHTML = [
+        { label: 'Total rows',      value: totalRows.toLocaleString() },
+        { label: 'Columns',         value: totalCols },
+        { label: 'Completeness',    value: completeness.toFixed(1) + '%' },
+        { label: 'Duplicate rows',  value: dupRows },
+        { label: 'Null values',     value: totalNulls.toLocaleString() },
+        { label: 'Outlier values',  value: totalOutliers },
+      ].map(m => `<div class="metric"><div class="metric-label">${m.label}</div><div class="metric-value">${m.value}</div></div>`).join('');
+
+      const findings = [];
+      if (mixedCount > 0) findings.push({ cls:'warn', icon:'alert-triangle', msg:`${mixedCount} row${mixedCount>1?'s use':' uses'} semicolons instead of commas as the delimiter. Normalised for this analysis – the source file should be fixed.` });
+      findings.push(dupRows === 0
+        ? { cls:'ok', icon:'circle-check', msg:'No duplicate rows found.' }
+        : { cls: dupRows>totalRows*0.05?'error':'warn', icon:'alert-triangle', msg:`${dupRows} duplicate row${dupRows>1?'s':''} detected (${(dupRows/totalRows*100).toFixed(1)}% of data).` });
+      findings.push(completeness >= 95
+        ? { cls:'ok', icon:'circle-check', msg:`Completeness is ${completeness.toFixed(1)}% – within acceptable range.` }
+        : { cls: completeness<80?'error':'warn', icon:'alert-triangle', msg:`Dataset is ${completeness.toFixed(1)}% complete. ${totalNulls.toLocaleString()} null/empty values across ${totalCols} columns.${highNullCols.length>0?' Columns with high null rate: '+highNullCols.map(c=>c.name).join(', ')+'.':''}` });
+      if (totalNegatives > 0) findings.push({ cls:'warn', icon:'alert-triangle', msg:`${totalNegatives} negative value${totalNegatives>1?'s':''} found in numeric columns. May indicate data entry errors or credit adjustments – verify before use.` });
+      if (totalOutliers > 0) findings.push({ cls:'warn', icon:'alert-triangle', msg:`${totalOutliers} statistical outlier${totalOutliers>1?'s':''} detected across numeric columns (IQR method).` });
+      if (currencyCols.length > 0) findings.push({ cls:'warn', icon:'alert-triangle', msg:`Currency symbols ($) found in: ${currencyCols.map(c=>c.name).join(', ')}. Values were parsed for analysis but source data should be cleaned.` });
+      if (dateCols.length > 0) findings.push({ cls:'warn', icon:'calendar', msg:`Mixed date formats detected in: ${dateCols.map(c=>c.name).join(', ')}. Recommend standardising to ISO 8601 (YYYY-MM-DD).` });
+      if (constCols.length > 0) findings.push({ cls:'warn', icon:'alert-triangle', msg:`${constCols.length} column${constCols.length>1?'s appear':' appears'} constant (single unique value): ${constCols.map(c=>c.name).join(', ')}.` });
+
+      document.getElementById('findings').innerHTML = findings.map(f =>
+        `<div class="finding ${f.cls}"><i class="ti ti-${f.icon}" aria-hidden="true"></i>${f.msg}</div>`
+      ).join('');
+
+      document.getElementById('col-rows').innerHTML = cols.map(c => {
+        const pct = (c.nullRate*100).toFixed(1);
+        const cls = c.nullRate>0.3 ? 'danger' : c.nullRate>0.1 ? 'warn' : '';
+        const flags = [
+          c.outliers>0 ? `<span class="flag" title="${c.outliers} outlier${c.outliers>1?'s':''}">⚑ outliers</span>` : '',
+          c.negatives>0 ? `<span class="flag" title="${c.negatives} negative value${c.negatives>1?'s':''}">− negatives</span>` : '',
+          c.hasCurrency ? `<span class="flag" title="Contains $ symbols">$ currency</span>` : '',
+        ].filter(Boolean).join('');
+        return `<tr>
+          <td class="col-name">${c.name}</td>
+          <td class="col-type">${c.type}${flags}</td>
+          <td><div class="bar-wrap"><div class="bar-fill ${cls}" style="width:${Math.min(parseFloat(pct),100)}%"></div></div></td>
+          <td class="pct">${pct}%</td>
+          <td class="pct">${c.unique.toLocaleString()}</td>
+        </tr>`;
+      }).join('');
+
+      const colW = Math.max(80, Math.floor(700/totalCols));
+      document.getElementById('sample-head').innerHTML = '<tr>' + headers.map(h=>`<th style="max-width:${colW}px">${h}</th>`).join('') + '</tr>';
+      document.getElementById('sample-body').innerHTML = rows.slice(0,5).map(r =>
+        '<tr>' + headers.map((_,i) => {
+          const v = r[i]!==undefined ? r[i] : '';
+          return `<td style="max-width:${colW}px" class="${isNull(v)?'null-cell':''}">${isNull(v)?'null':v}</td>`;
+        }).join('') + '</tr>'
+      ).join('');
+
+      document.getElementById('drop-zone').style.display = 'none';
+      document.getElementById('results').style.display = 'block';
+    }
+
+    function resetTool() {
+      document.getElementById('drop-zone').style.display = 'block';
+      document.getElementById('results').style.display = 'none';
+      document.getElementById('file-input').value = '';
+      document.getElementById('delimiter-alert').style.display = 'none';
+    }
+  </script>
+</body>
+</html>
