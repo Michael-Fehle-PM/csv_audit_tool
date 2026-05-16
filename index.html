@@ -226,6 +226,39 @@
     .null-cell { color: var(--text-tertiary); font-style: italic; }
 
     .actions { margin-top: 1.5rem; display: flex; gap: 10px; }
+
+    .security-section {
+      background: var(--bg);
+      border: 0.5px solid var(--border);
+      border-left: 3px solid var(--red);
+      border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+      overflow: hidden;
+    }
+    .security-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.85rem 1rem;
+      border-bottom: 0.5px solid var(--border);
+      background: var(--red-light);
+    }
+    .security-header-left { display: flex; align-items: center; gap: 8px; }
+    .security-header h3 { font-size: 13px; font-weight: 600; color: var(--red-dark); }
+    .security-header i { font-size: 16px; color: var(--red); }
+    .security-count { font-size: 12px; font-weight: 500; background: var(--red); color: #fff; padding: 2px 8px; border-radius: 10px; }
+    .security-clear { background: var(--green-light); border-left-color: var(--green); }
+    .security-clear .security-header { background: var(--green-light); border-bottom-color: var(--border); }
+    .security-clear .security-header h3 { color: var(--green-dark); }
+    .security-clear .security-header i { color: var(--green); }
+    .payload-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .payload-table th { font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-tertiary); padding: 8px 14px; text-align: left; border-bottom: 0.5px solid var(--border); background: var(--bg-secondary); }
+    .payload-table td { padding: 7px 14px; border-bottom: 0.5px solid var(--border); color: var(--text-primary); vertical-align: middle; }
+    .payload-table tr:last-child td { border-bottom: none; }
+    .payload-type { display: inline-block; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.04em; }
+    .payload-type.sql  { background: var(--red-light);   color: var(--red-dark); }
+    .payload-type.xss  { background: var(--amber-light); color: var(--amber-dark); }
+    .payload-type.cmd  { background: #EDE9FE;            color: #5B21B6; }
+    .payload-value { font-family: monospace; font-size: 11px; color: var(--text-secondary); max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: middle; }
     button {
       font-family: inherit;
       font-size: 13px;
@@ -304,6 +337,9 @@
           <tbody id="col-rows"></tbody>
         </table>
       </div>
+
+      <p class="section-title">Security scan</p>
+      <div id="security-section"></div>
 
       <p class="section-title">Sample data (first 5 rows)</p>
       <div class="sample-wrap">
@@ -416,6 +452,114 @@
       return (b/1048576).toFixed(1) + ' MB';
     }
 
+    function detectInjection(values) {
+      const SQL_PATTERNS = [
+        /'\s*OR\s*'?\d*'?\s*=\s*'?\d*/i,
+        /'\s*OR\s+\d+=\d+/i,
+        /'\s*--/,
+        /;\s*(DROP|DELETE|INSERT|UPDATE|SELECT|EXEC|EXECUTE|TRUNCATE|ALTER|CREATE)\s/i,
+        /UNION\s+SELECT/i,
+        /information_schema/i,
+        /xp_cmdshell/i,
+        /SLEEP\s*\(\s*\d/i,
+        /WAITFOR\s+DELAY/i,
+        /CONVERT\s*\(int/i,
+        /admin'--/i,
+        /'x'='x/i,
+      ];
+      const XSS_PATTERNS = [
+        /<script[\s>]/i,
+        /<\/script>/i,
+        /javascript\s*:/i,
+        /onerror\s*=/i,
+        /onload\s*=/i,
+        /onclick\s*=/i,
+        /<svg[\s>]/i,
+        /<img[^>]+src\s*=/i,
+        /<body[\s>]/i,
+        /alert\s*\(/i,
+        /document\.cookie/i,
+        /document\.domain/i,
+      ];
+      const CMD_PATTERNS = [
+        /\.\.[/\\]/,
+        /\|\s*(ls|cat|whoami|id|pwd)/i,
+        /;\s*cat\s+\/etc\//i,
+        /\$\([\w]+\)/,
+        /`[\w]+`/,
+        /%0a\s*cat/i,
+      ];
+
+      const hits = [];
+      values.forEach((v, rowIdx) => {
+        if (!v || v.length < 3) return;
+        if (SQL_PATTERNS.some(p => p.test(v))) hits.push({ row: rowIdx + 2, type: 'sql', value: v });
+        else if (XSS_PATTERNS.some(p => p.test(v))) hits.push({ row: rowIdx + 2, type: 'xss', value: v });
+        else if (CMD_PATTERNS.some(p => p.test(v))) hits.push({ row: rowIdx + 2, type: 'cmd', value: v });
+      });
+      return hits;
+    }
+
+    function renderSecurity(cols) {
+      const allHits = [];
+      cols.forEach(c => {
+        if (c.type !== 'text') return;
+        const hits = detectInjection(c.vals);
+        hits.forEach(h => allHits.push({ col: c.name, ...h }));
+      });
+
+      const el = document.getElementById('security-section');
+
+      if (allHits.length === 0) {
+        el.innerHTML = `<div class="security-section security-clear">
+          <div class="security-header">
+            <div class="security-header-left">
+              <i class="ti ti-shield-check" aria-hidden="true"></i>
+              <h3>No injection payloads detected</h3>
+            </div>
+          </div>
+        </div>`;
+        return;
+      }
+
+      const sqlCount = allHits.filter(h => h.type==='sql').length;
+      const xssCount = allHits.filter(h => h.type==='xss').length;
+      const cmdCount = allHits.filter(h => h.type==='cmd').length;
+      const typeLabel = { sql: 'SQL', xss: 'XSS', cmd: 'CMD' };
+      const summary = [
+        sqlCount > 0 ? `${sqlCount} SQL injection` : '',
+        xssCount > 0 ? `${xssCount} XSS` : '',
+        cmdCount > 0 ? `${cmdCount} command injection` : '',
+      ].filter(Boolean).join(', ');
+
+      const rows = allHits.slice(0, 20).map(h => `<tr>
+        <td>${h.col}</td>
+        <td><span class="payload-type ${h.type}">${typeLabel[h.type]}</span></td>
+        <td><span class="payload-value" title="${h.value.replace(/"/g,'&quot;')}">${h.value.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</span></td>
+        <td style="color:var(--text-tertiary);font-size:12px;">row ${h.row}</td>
+      </tr>`).join('');
+
+      const moreMsg = allHits.length > 20 ? `<tr><td colspan="4" style="padding:8px 14px; font-size:12px; color:var(--text-tertiary);">… and ${allHits.length - 20} more. Do not load this file into any system without sanitising first.</td></tr>` : '';
+
+      el.innerHTML = `<div class="security-section">
+        <div class="security-header">
+          <div class="security-header-left">
+            <i class="ti ti-shield-exclamation" aria-hidden="true"></i>
+            <h3>Injection payloads detected</h3>
+          </div>
+          <span class="security-count">${allHits.length} hit${allHits.length>1?'s':''}</span>
+        </div>
+        <div style="padding:0.75rem 1rem; font-size:13px; color:var(--red-dark); border-bottom:0.5px solid var(--border);">
+          <i class="ti ti-alert-triangle" style="font-size:14px;vertical-align:-2px;margin-right:6px;" aria-hidden="true"></i>
+          ${summary} payload${allHits.length>1?'s':''} found. This file should be sanitised before loading into any database, API, or pipeline.
+        </div>
+        <table class="payload-table" aria-label="Security findings">
+          <thead><tr><th>Column</th><th>Type</th><th>Payload</th><th>Location</th></tr></thead>
+          <tbody>${rows}${moreMsg}</tbody>
+        </table>
+      </div>`;
+    }
+
     function analyse(filename, filesize, text) {
       const rawLines = text.trim().split(/\r?\n/);
       const mixedCount = countMixedDelimRows(rawLines);
@@ -446,8 +590,14 @@
       const dateCols = cols.filter(c => c.type === 'date');
       const constCols = cols.filter(c => c.unique <= 1 && c.nullRate < 1);
 
+      // Security scan
+      const allSecHits = [];
+      cols.forEach(c => { if (c.type === 'text') detectInjection(c.vals).forEach(h => allSecHits.push(h)); });
+      const totalSecHits = allSecHits.length;
+
       let score = 'Good';
-      if (mixedCount > 0 || dupRows > totalRows*0.05 || highNullCols.length > 0 || completeness < 95 || totalNegatives > 0 || currencyCols.length > 0) score = 'Needs attention';
+      if (totalSecHits > 0) score = 'Unsafe';
+      else if (mixedCount > 0 || dupRows > totalRows*0.05 || highNullCols.length > 0 || completeness < 95 || totalNegatives > 0 || currencyCols.length > 0) score = 'Needs attention';
       if (dupRows > totalRows*0.15 || completeness < 70) score = 'Poor';
 
       // Render
@@ -456,7 +606,7 @@
 
       const ob = document.getElementById('overall-badge');
       ob.textContent = score;
-      ob.className = 'badge ' + (score==='Good' ? 'badge-ok' : score==='Needs attention' ? 'badge-warn' : 'badge-bad');
+      ob.className = 'badge ' + (score==='Good' ? 'badge-ok' : score==='Unsafe' ? 'badge-bad' : score==='Needs attention' ? 'badge-warn' : 'badge-bad');
 
       if (mixedCount > 0) {
         const da = document.getElementById('delimiter-alert');
@@ -471,7 +621,8 @@
         { label: 'Duplicate rows',  value: dupRows },
         { label: 'Null values',     value: totalNulls.toLocaleString() },
         { label: 'Outlier values',  value: totalOutliers },
-      ].map(m => `<div class="metric"><div class="metric-label">${m.label}</div><div class="metric-value">${m.value}</div></div>`).join('');
+        { label: 'Security hits',   value: totalSecHits, danger: totalSecHits > 0 },
+      ].map(m => `<div class="metric"><div class="metric-label">${m.label}</div><div class="metric-value" style="${m.danger?'color:var(--red)':''}">${m.value}</div></div>`).join('');
 
       const findings = [];
       if (mixedCount > 0) findings.push({ cls:'warn', icon:'alert-triangle', msg:`${mixedCount} row${mixedCount>1?'s use':' uses'} semicolons instead of commas as the delimiter. Normalised for this analysis – the source file should be fixed.` });
@@ -487,9 +638,13 @@
       if (dateCols.length > 0) findings.push({ cls:'warn', icon:'calendar', msg:`Mixed date formats detected in: ${dateCols.map(c=>c.name).join(', ')}. Recommend standardising to ISO 8601 (YYYY-MM-DD).` });
       if (constCols.length > 0) findings.push({ cls:'warn', icon:'alert-triangle', msg:`${constCols.length} column${constCols.length>1?'s appear':' appears'} constant (single unique value): ${constCols.map(c=>c.name).join(', ')}.` });
 
+      if (totalSecHits > 0) findings.unshift({ cls:'error', icon:'shield-exclamation', msg:`${totalSecHits} injection payload${totalSecHits>1?'s':''} detected (SQL, XSS, or command injection). This file must be sanitised before use.` });
+
       document.getElementById('findings').innerHTML = findings.map(f =>
         `<div class="finding ${f.cls}"><i class="ti ti-${f.icon}" aria-hidden="true"></i>${f.msg}</div>`
       ).join('');
+
+      renderSecurity(cols);
 
       document.getElementById('col-rows').innerHTML = cols.map(c => {
         const pct = (c.nullRate*100).toFixed(1);
@@ -526,6 +681,7 @@
       document.getElementById('results').style.display = 'none';
       document.getElementById('file-input').value = '';
       document.getElementById('delimiter-alert').style.display = 'none';
+      document.getElementById('security-section').innerHTML = '';
     }
   </script>
 </body>
