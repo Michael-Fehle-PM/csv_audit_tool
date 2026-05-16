@@ -81,4 +81,4 @@ open index.html
 
 ## About
 
-Built by [Michael F](https://github.com/MichaelF-PM) as part of a portfolio of data tooling projects. Background in SaaS product management across martech and fintech, with a focus on data quality, ETL pipelines, and operational tooling.
+Built by [Michael F](https://github.com/Michael-Fehle-PM) as part of a portfolio of data tooling projects. Background in SaaS product management across martech and fintech, with a focus on data quality, ETL pipelines, and operational tooling.
