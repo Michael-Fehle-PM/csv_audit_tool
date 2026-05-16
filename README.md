@@ -62,7 +62,7 @@ The first version scored a genuinely messy test file as "Good" because semicolon
 No build step required. Clone the repo and open `index.html` in a browser:
 
 ```bash
-git clone https://github.com/MichaelF-PM/csv-audit-tool.git
+git clone https://github.com/Michael-Fehle-PM/csv-audit-tool.git
 cd csv-audit-tool
 open index.html
 ```
